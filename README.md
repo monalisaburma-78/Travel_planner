@@ -3,18 +3,8 @@
 A modern full-stack travel planning application with AI-powered itinerary generation, weather forecasting, and budget management.
 
 
-
-
-
-
 https://github.com/user-attachments/assets/aea52bbf-06ac-443d-979f-db2b9808332e
 
-
-
-
-
-> 🚧 **Deployment Status:** Not deployed yet. Deployment is currently in progress.  
-> ✅ The application can be fully run locally using Docker or localhost.
 
 
 ## Features
@@ -117,6 +107,10 @@ The application is containerized with multi-platform support:
 - linux/amd64
 - linux/arm64
 - linux/arm/v7
+
+> 🚧 **Deployment Status:** Not deployed yet. Deployment is currently in progress.  
+> ✅ The application can be fully run locally using localhost.
+
 
 ## Project Structure
 
