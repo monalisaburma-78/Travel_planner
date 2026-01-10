@@ -2,6 +2,14 @@
 
 A modern full-stack travel planning application with AI-powered itinerary generation, weather forecasting, and budget management.
 
+### 🎥 Demo Preview
+
+<video src="assets/travel_planner_demo.mp4" controls autoplay muted loop width="100%"></video>
+
+> 🚧 **Deployment Status:** Not deployed yet. Deployment is currently in progress.  
+> ✅ The application can be fully run locally using Docker or localhost.
+
+
 ## Features
 
 - AI-powered travel itinerary generation using Google Gemini
