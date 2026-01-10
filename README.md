@@ -4,7 +4,7 @@ A modern full-stack travel planning application with AI-powered itinerary genera
 
 
 
-https://github.com/user-attachments/assets/852846f2-8e3d-48e1-aad3-8e99cc9d30c6
+▶️ **[Quick View of Interface](assets/travel_planner_demo.mp4)**
 
 
 
