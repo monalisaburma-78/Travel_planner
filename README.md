@@ -3,7 +3,8 @@
 A modern full-stack travel planning application with AI-powered itinerary generation, weather forecasting, and budget management.
 
 
-https://github.com/user-attachments/assets/aea52bbf-06ac-443d-979f-db2b9808332e
+
+https://github.com/user-attachments/assets/852846f2-8e3d-48e1-aad3-8e99cc9d30c6
 
 
 
