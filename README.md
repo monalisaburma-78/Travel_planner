@@ -5,12 +5,13 @@ A modern full-stack travel planning application with AI-powered itinerary genera
 
 
 
-https://github.com/user-attachments/assets/7fbb531d-6657-4363-8e3e-0abad6c200f0
 
 
-### 🎥 Demo Preview
+https://github.com/user-attachments/assets/aea52bbf-06ac-443d-979f-db2b9808332e
 
-<video src="assets/Recording 2026-01-10 195501.mp4" controls autoplay muted loop width="100%"></video>
+
+
+
 
 > 🚧 **Deployment Status:** Not deployed yet. Deployment is currently in progress.  
 > ✅ The application can be fully run locally using Docker or localhost.
