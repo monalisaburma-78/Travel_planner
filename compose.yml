@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Backend Service - Works on all platforms
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      # Multi-platform support
+      platforms:
+        - linux/amd64
+        - linux/arm64
+        - linux/arm/v7
+    container_name: travel-planner-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+      # Accept connections from anywhere for mobile/laptop access
+      - CORS_ORIGINS=*
+      - DATABASE_URL=sqlite:////app/data/travel_planner.db
+    volumes:
+      - backend-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - travel-network
+    # Resource limits for better performance
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Frontend Service - Works on all platforms
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Multi-platform support
+      platforms:
+        - linux/amd64
+        - linux/arm64
+        - linux/arm/v7
+    container_name: travel-planner-frontend
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS (if using SSL)
+    environment:
+      # Use the host's IP instead of localhost for mobile access
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - travel-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  backend-data:
+    driver: local
+
+networks:
+  travel-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
