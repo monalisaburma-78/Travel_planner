@@ -37,6 +37,12 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
   const synthRef = useRef(window.speechSynthesis);
   const chatEndRef = useRef(null);
   const silenceTimerRef = useRef(null);
+  const networkRetryCountRef = useRef(0);
+  const networkRetryTimerRef = useRef(null);
+  const fullTranscriptRef = useRef('');
+  const isManualStopRef = useRef(false);
+  const MAX_NETWORK_RETRIES = 2;
+  const SILENCE_TIMEOUT_MS = 3000; // allow a few seconds of pause between phrases before sending
 
   // Check browser support
   useEffect(() => {
@@ -58,12 +64,14 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
     }
 
     return () => {
+      isManualStopRef.current = true;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
       if (synthRef.current) {
         synthRef.current.cancel();
       }
+      clearTimeout(networkRetryTimerRef.current);
     };
   }, []);
 
@@ -109,33 +117,95 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
     recognitionRef.current.lang = 'en-US';
 
     recognitionRef.current.onresult = (event) => {
-      const current = event.resultIndex;
-      const transcript = event.results[current][0].transcript;
-      setCurrentTranscript(transcript);
+      // A result means the connection to the recognition service is healthy
+      networkRetryCountRef.current = 0;
 
-      // Auto-send after silence
-      clearTimeout(silenceTimerRef.current);
-      if (event.results[current].isFinal) {
-        silenceTimerRef.current = setTimeout(() => {
-          handleSendMessage(transcript);
-        }, 1500); // Send after 1.5 seconds of silence
+      // Accumulate every finalized chunk so a pause between phrases doesn't
+      // drop what was already said; interim text is just for live display.
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          fullTranscriptRef.current = `${fullTranscriptRef.current} ${result[0].transcript}`.trim();
+        } else {
+          interimTranscript += result[0].transcript;
+        }
       }
+
+      setCurrentTranscript(`${fullTranscriptRef.current} ${interimTranscript}`.trim());
+
+      // Reset the silence countdown on any speech activity (interim or final)
+      // so the user gets a few full seconds of pause before we auto-send.
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        const finalMessage = fullTranscriptRef.current.trim();
+        if (finalMessage) {
+          isManualStopRef.current = true;
+          recognitionRef.current?.stop();
+          fullTranscriptRef.current = '';
+          handleSendMessage(finalMessage, true);
+        }
+      }, SILENCE_TIMEOUT_MS);
     };
 
     recognitionRef.current.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
-      setIsListening(false);
-      
+
       if (event.error === 'not-allowed') {
+        setIsListening(false);
         toast.error('🎤 Microphone access denied. Please enable it in browser settings.');
       } else if (event.error === 'no-speech') {
-        // Silent error - user will try again
+        // Don't flip isListening here — onend fires right after this and will
+        // transparently resume the session if the user's own silence timer
+        // (our 3s gap tolerance) hasn't elapsed yet, avoiding a UI flicker.
       } else if (event.error === 'network') {
-        toast.error('❌ Network error. Please check your connection.');
+        // The Web Speech API needs to reach the browser's speech servers.
+        // Transient blips are common, so retry a couple of times before
+        // bothering the user, then fall back to typing instead of just erroring.
+        setIsListening(false);
+        if (networkRetryCountRef.current < MAX_NETWORK_RETRIES) {
+          networkRetryCountRef.current += 1;
+          clearTimeout(networkRetryTimerRef.current);
+          networkRetryTimerRef.current = setTimeout(() => {
+            try {
+              setIsListening(true);
+              recognitionRef.current.start();
+            } catch (e) {
+              // already stopped/started elsewhere - ignore
+            }
+          }, 600 * networkRetryCountRef.current);
+        } else {
+          networkRetryCountRef.current = 0;
+          toast.warning('🎤 Voice connection is unstable right now — you can type your message instead.');
+          setTimeout(() => {
+            document.getElementById('voice-text-input')?.focus();
+          }, 100);
+        }
       }
     };
 
     recognitionRef.current.onend = () => {
+      if (isManualStopRef.current) {
+        isManualStopRef.current = false;
+        setIsListening(false);
+        setCurrentTranscript('');
+        return;
+      }
+
+      // Some browsers end the recognition session on their own during a pause,
+      // even with continuous=true. If our own silence timer hasn't fired yet,
+      // the user hasn't actually gone quiet long enough — resume transparently
+      // instead of cutting them off, keeping whatever was already transcribed.
+      if (silenceTimerRef.current) {
+        try {
+          recognitionRef.current.start();
+          setIsListening(true);
+          return;
+        } catch (e) {
+          // already starting/started elsewhere - fall through to stopped state
+        }
+      }
+
       setIsListening(false);
       setCurrentTranscript('');
     };
@@ -230,9 +300,13 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
       return;
     }
 
+    networkRetryCountRef.current = 0;
+    clearTimeout(networkRetryTimerRef.current);
+    isManualStopRef.current = false;
+    fullTranscriptRef.current = '';
     setCurrentTranscript('');
     setIsListening(true);
-    
+
     try {
       recognitionRef.current.start();
       // REMOVED: No more annoying "I'm listening. Go ahead!" announcement
@@ -245,16 +319,19 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
 
   // Stop listening
   const stopListening = () => {
+    isManualStopRef.current = true;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
     setIsListening(false);
     clearTimeout(silenceTimerRef.current);
-    
-    // Send current transcript if exists
-    if (currentTranscript.trim()) {
-      handleSendMessage(currentTranscript);
+
+    // Send whatever was transcribed (finalized + in-progress) if any
+    const finalMessage = currentTranscript.trim() || fullTranscriptRef.current.trim();
+    if (finalMessage) {
+      handleSendMessage(finalMessage, true);
     }
+    fullTranscriptRef.current = '';
   };
 
   // Text-to-speech with multi-language support
@@ -350,7 +427,9 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
   };
 
   // Handle sending message (voice or text)
-  const handleSendMessage = async (message) => {
+  // viaVoice controls whether the AI's reply is spoken aloud - typed
+  // messages should just get a chat reply, voice input should get a spoken one
+  const handleSendMessage = async (message, viaVoice = false) => {
     const userMessage = message || textInput;
     
     if (!userMessage.trim()) return;
@@ -435,8 +514,11 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
       
       console.log('🎯 Final TTS language:', speakLanguage);
 
-      // Speak response in correct language
-      speak(response_text, speakLanguage);
+      // Only speak the reply aloud if the user spoke to us - typed messages
+      // just get a normal chat reply, no audio.
+      if (viaVoice) {
+        speak(response_text, speakLanguage);
+      }
 
       // Execute form commands if any
       if (commands && commands.length > 0 && onVoiceCommand) {
@@ -656,7 +738,7 @@ function VoiceAssistant({ darkMode, onVoiceCommand }) {
       )}
 
       {/* Custom CSS for slide-up animation */}
-      <style jsx>{`
+      <style>{`
         @keyframes slide-up {
           from {
             opacity: 0;
